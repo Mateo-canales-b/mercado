@@ -1,0 +1,617 @@
+---
+title: "Tarea_2_mercado"
+author: "mateo"
+date: "2024-05-16"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+subtitle: Prueba
+---
+
+```{r Setup,include=FALSE}
+knitr::opts_chunk$set(
+	echo = FALSE,
+	message = FALSE,
+	warning = FALSE,
+	include = FALSE
+)
+# Cargar librerías y establecer el directorio de trabajo
+  paquetes <- c("readxl", "PortfolioAnalytics", "ggplot2", "lubridate", "tidyverse", "DT","tidyquant","xts", "quantmod", "IntroCompFinR")
+  options(scipen = 5)  # Configuración para evitar la notación científica
+  instalar_y_cargar_paquetes <- function(paquetes) {
+      paquetes_instalar <- paquetes[!(paquetes %in% installed.packages()[, "Package"])]
+      if (length(paquetes_instalar) > 0) {
+        install.packages(paquetes_instalar)
+      }
+      invisible(lapply(paquetes, function(x) library(x, character.only = TRUE, quiet = TRUE)))
+    }
+  setwd("~/Desktop/Todo R") # Establecer el directorio de trabajo al directorio que contiene el archivo .R
+  instalar_y_cargar_paquetes(paquetes)
+```
+
+Un académico llamado Robert Schiller diseñó una razón modificada del P/E. Se conoce como “Cyclically adjusted price-to-earnings ratio” (CAPE) y lo que hace es calcular la razón precio utilidad (PE) pero con dos modificaciones: i) usando la utilidad promedio de los últimos 10 años y ii) ajustar por inflación. En el archivo Excel “Datos Tarea 2” encontrará los valores del ratio CAPE para el índice SP500 de manera mensual desde el año 1900 hasta hoy. Además de eso, cuenta con los valores del SP500 junto a los dividendos pagados por las empresas que componen el índice en el último año. Finalmente, también cuenta con las tasas (mensuales) de los bonos americanos a 10 años plazo. Siga las instrucciones y desarrolle los siguientes ítems:
+
+**1.** Realice los siguientes gráficos:
+
+```{r Database}
+
+  Base <- read_xlsx("~/Desktop/Datos Tarea 2.xlsx")
+  Base$Date<-as_date(Base$Date)
+  Base$`SP500 Dividends (anual)` <- Base$`SP500 Dividends (anual)`/12
+  nombres<-c(colnames(Base),"SP500 Retorno")
+  lt <- length(Base$Date)
+  Base <- data.frame(Base, Rb = rep(NA, lt))
+  for(i in 2:lt) { Base$Rb[i] <- ((Base$SP500[i]-Base$SP500[i - 1]) / Base$SP500[i - 1])}
+  colnames(Base)<-nombres# Definir los colores como una lista
+  colores <- list(
+  cape = rgb(0, 255, 55, maxColorValue = 255),
+  sp = rgb(0, 0, 255, maxColorValue = 255),
+  spd = rgb(255, 0, 0, maxColorValue = 255),
+  b10 = rgb(125, 125, 0, maxColorValue = 255)
+  )
+
+```
+
+```{r Puntos importantes}
+
+  C1<-as_date("1929-09-01")
+  C1c <- format(C1,"%Y-%m")
+  C1l<-"Gran depresión "
+  C2 <- as_date("1929-11-01")
+  C2a <- as_date("1900-11-01")
+  C2c <- format(C2,"%Y-%m")
+  Rm <- tail(sort(Base$`SP500 Retorno`,decreasing = TRUE),n=4)
+  Rm1 <- Rm[1]
+  Rm2 <- Rm[2]
+  Rm3 <- Rm[3]
+  Rm4 <- Rm[4]
+
+```
+
+```{r Pregunta 1}
+
+#Generamos los gráficos
+graf1 <- ggplot(data=Base,aes(x=Date,y=CAPE))+
+  geom_line(color=colores$cape)+
+  theme_linedraw() +
+  xlab("Tiempo" ) + 
+  scale_x_date(date_labels = "%Y", breaks = seq(as.Date("1900-01-01"), as.Date("2030-01-01"), by= "15 years"))+  # Cambiar la escala del eje x
+  ylab("CAPE") +
+  ggtitle("Gráfico 1", subtitle = "CAPE en el tiempo")+
+  labs(caption = "Fuente: Elaboracion Propia | Datos: Datos Tarea 2")+
+  geom_point(data = Base[Base$Date == C1, ], aes(x = Date, y = CAPE), 
+             color = "red", size = 3) + # Añadir punto en una fecha específica
+  annotate("text", x = C1, y = Base$CAPE[Base$Date == C1], label = paste("(", C1c, ",", round(Base$CAPE[Base$Date == C1],2), ")"), color = "red", hjust = 0, vjust = -1) +
+  geom_smooth(method ="lm", color="black")
+graf2 <- ggplot(data=Base,aes(x=Date,y=SP500))+
+    theme_linedraw() +
+    geom_line(color=colores$sp)+
+    xlab("Tiempo" ) + 
+    ylab("Valor del índice [Dólar]") +
+    ggtitle("Gráfico 2", subtitle = "Evolucióin del S&P 500 en el tiempo ")+
+    labs(caption = "Fuente: Elaboracion Propia | Datos: Datos Tarea 2")+
+  scale_x_date(date_labels = "%Y", breaks = seq(as.Date("1900-01-01"), as.Date("2030-01-01"), by= "15 years"))  # Cambiar la escala del eje x
+graf3 <- ggplot(data=Base,aes(x=Date,y=`SP500 Retorno`*100))+
+  theme_linedraw()+
+  geom_line(color=colores$spd)+
+  xlab("Tiempo" ) + 
+  ylab("Retornos [%]") +
+  ggtitle("Gráfico 3", subtitle = "Retornos del S&P 500 en el tiempo")+
+  labs(caption = "Fuente: Elaboracion Propia | Datos: Datos Tarea 2")+
+  scale_x_date(date_labels = "%Y", breaks =seq( as.Date("1900-01-01"), as.Date("2030-01-01"), by="15 years"))+
+  geom_point(data = Base[Base$Date == C2, ], aes(x = Date, y =`SP500 Retorno`*100 ), color = "green", size = 2) + # Añadir punto en una fecha específica
+  annotate("text", x = C2, y = (Base$`SP500 Retorno`[Base$Date == C2])*100,
+           label = paste("(", C2c, ",", round(Base$`SP500 Retorno`[Base$Date ==C2],
+3)*100, "%)"),color = "green", hjust = 1.02, vjust = -1,size=3.5) 
+
+```
+
+**a)** (1 pto.| 1 pto. acumulado) Grafique el ratio CAPE a lo largo del tiempo, desde 1900/ene hasta 2022/abr. Etiquetelos meses en donde el ratio alcanzó valores elevados que le llamen la atención. (Ej. 1929-sept \| 32,56)
+
+```{r Respuestas 1a, include=TRUE}
+
+  print(graf1)
+
+```
+
+**b)** (1 pto.| 2 pts. acumulados) Grafique la evolución del SP 500, desde 1900/ene hasta 2022/abr.
+
+```{r Respuestas 1b, include=TRUE}
+  print(graf2)
+  
+```
+
+**c)** (2 pts.| 4 pts. acumulados) Grafique los retornos del SP500, desde 1900/ene hasta 2022/abr. Etiquete los meses con mayores caídas. (Ej. 1929/nov \| -26,47\%)
+
+```{r Respuestas 1c, include=TRUE}
+  print(graf3)
+
+```
+
+A partir de los gráficos realizados, comente sobre si le parece que hay alguna relación entre CAPE y caídas fuertes de mercado.
+
+**2.** Suponga que en 1980/abr nacieron dos amigas: Belen y Sara. Sus padres sabían de inversiones y del poder del interés compuesto, y decidieron invertir \$1000 USD a nombre de sus hijas en ese mismo mes. Los padres de Belen invirtieron los \$1000 USD en un portafolio de bonos a 10 años plazo, mientras que los padres de Sara invirtieron los \$1000 USD en un portafolio que replica el SP500. En ambos casos, los ingresos que se iban recibiendo, tanto pagos de intereses como de dividendos, se fueron reinvirtiendo en los portafolios.
+
+```{r Pregunta 2}
+
+#generamos retornos 
+Base1 <- Base[Base$Date>=as_date("1980-04-01"),]
+lnb <- length(Base1$Date)
+colores <- c(colores, sa = rgb(224,33,138,maxColorValue = 255), be = rgb(8, 52, 162,maxColorValue = 255)) 
+Base1<-data.frame(Base1, Belen = rep(NA,lnb), Ret.Belen = rep(NA, lnb), Sara = rep(NA, lnb), Ret.Sara= rep(NA, lnb), Cant.acc = rep(NA,lnb), Dividendo.sa = rep(NA,lnb), Compra.acc = rep(NA,lnb))
+#Belen
+{
+Base1$Belen[1]<-1000
+  for(i in 2:lnb) { 
+    Base1$Belen [i] <- Base1$Belen [i-1] * (1 + Base1$Tasas.Bono.10Y..mensual. [i]) 
+    Base1$Ret.Belen[i] <- ((Base1$Belen[i]-Base1$Belen[i - 1]) / Base1$Belen[i - 1])}
+}
+#Sara
+{
+Base1$Sara[1]<-1000
+Base1$Cant.acc[1]<-Base1$Sara[1]/Base1$SP500[1]
+Base1$Dividendo.sa[1] <- (Base1$Cant.acc[1]*Base1$SP500.Dividends..anual. [1])
+Base1$Compra.acc[1] <- Base1$Dividendo.sa[1]/Base1$SP500[1]
+  for(i in 2:lnb) { 
+    Base1$Dividendo.sa[i] <- Base1$Cant.acc[i-1] * Base1$SP500.Dividends..anual.[i]
+    Base1$Compra.acc[i] <- Base1$Dividendo.sa[i]/Base1$SP500[i]
+    Base1$Cant.acc[i] <- Base1$Cant.acc[i-1]+Base1$Compra.acc[i]
+    Base1$Sara[i] <- (Base1$Sara[i-1] * (1 + Base1$SP500.Retorno [i]))+Base1$Dividendo.sa[i]
+    Base1$Ret.Sara[i] <- ((Base1$Sara[i]-Base1$Sara[i-1]) / Base1$Sara[i-1])
+  }
+} 
+#generamos graficos
+graf4 <- {
+    ggplot(data = Base1, aes(x = Date)) +
+    theme_linedraw() +
+    ggtitle("Gráfico 4", subtitle = "Comparativa Belén y Sara") +
+    scale_x_date(date_labels = "%Y", breaks = seq(as.Date("1980-01-01"),
+                                                  as.Date("2030-01-01"), by = "5 years")) +
+    labs(color = "Leyenda", caption = "Fuente: Elaboracion Propia | Datos: Datos Tarea 2") +
+    xlab("Tiempo") + 
+    ylab("Capital [Dólares]") +
+    geom_line(aes(y = Sara, color = "Sara")) +
+    geom_line(aes(y = Belen, color = "Belén")) +
+    scale_color_manual(name = "Leyenda", values = c("Sara" = colores$sa, "Belén" = colores$be))
+}
+
+```
+
+**a)** (1 pto.| 5 pts. acumulados) Muestre en un solo gráfico la evolución de ambos portafolios desde 1980/abr hasta 2022/abr.
+
+```{r Respuestas Pregunta 2a, include=TRUE}
+  print(graf4)
+  DT::datatable( Base1)
+```
+
+**b)** (2 pts.| 7 pts. acumulados) Determine la rentabilidad realizada (anual) y volatilidad (anual) de ambos portafolios.
+
+```{r Resolucion Pregunta 2b}
+years <-length(Base1$Date)/12 # Número de años en el periodo
+f.Sara <- tail(Base1$Sara,1)
+f.Belen <- tail(Base1$Belen,1)
+# Rentabilidad Anualizada 
+Rent.Sara <- (f.Sara-1000)/(10)
+Rent.an.Sara <- Rent.Sara/years
+Rent.Belen <- (f.Belen-1000)/(10)
+Rent.an.Belen <- Rent.Belen/years
+# Volatilidad Anualizada 
+Volat.Sara <- StdDev(Base1$Ret.Sara)
+Volat.Belen <- StdDev(Base1$Ret.Belen)
+
+```
+
+```{r Respuestas 2b, include=TRUE}
+
+```
+ La rentabilidad anualizada de Belén es `r round(Rent.an.Belen,3)`\%, y su Volatilidad anualizada es de `r round(Volat.Belen,4)`. \n La rentabilidad anualizada de Sara es `r round(Rent.an.Sara,3)`\% mientras que la Volatilidad anualizada es `r round(Volat.Sara,4)`
+
+**c)** (1 pto.| 8 pts. acumulados) Comente los resultados.
+
+La rentabilidad anualizada de Sara es muchísimo más alta que la de Belén, y tiene suficiente lógica ya que la capitalización y reinversión es mucho mayor al momento de tener acciones y dividendos. Además, esto sigue la lógica que a mayor riesgo -o volatilidad- se obtengan mayores retornos. esto es posible apreciar en la volatilidad de Belén `r round(Volat.Belen[1],3)` ya que tiene retornos de `r round(Rent.an.Belen,3)`\%, los que son significativamente menores a los de Sara que son `r round(Rent.an.Sara,3)`\%, la cual asume un riesgo de `r round(Volat.Sara[1],3)`.
+
+**3.** Analice que hubiese pasado si se invertía ese dinero de acuerdo a una estrategia basada en el ratio CAPE. La estrategia es la siguiente: Mes a mes se invierte el 100\% de su patrimonio en el SP500 si la razón CAPE esté dentro de una zona favorable (umbral definido a su criterio) o 100\% en bonos en caso contrario. Por ejemplo, en 1980/abr debe invertir los \$1000 USD en el SP500 si es que el CAPE de 1980/mar es menor al umbral que definió; en caso contrario los invierte en bonos.
+
+```{r Resolucion Pregunta 3}
+# Fijar valores iniciales 
+umbral_CAPE<-mean(Base1$CAPE)
+# Simular la estrategia de inversión
+porta.cape <- function(umbral_CAPE){
+PCape  <-  rep(NA,lnb)
+Cant.acc.cap <- rep(NA,lnb)
+Dividendo.cap <-  rep(NA,lnb)
+Compra.acc.cap <- rep(NA,lnb) 
+Ret.cape <-  rep(NA, lnb)
+Ganancia.cape <-  rep(NA,lnb)
+Tipo.inversion <-  rep(NA,lnb)
+PCape[1]<-1000
+Cant.acc.cap[1]<-PCape[1]/Base1$SP500[1]
+Dividendo.cap[1] <- (Cant.acc.cap[1]*Base1$SP500.Dividends..anual. [1])
+Compra.acc.cap[1] <- 0
+Ganancia.cape[1] <- 0
+Tipo.inversion[1] <- "Nada" 
+  for (i in 2:lnb) {
+    if (Base1$CAPE[i-1] <= umbral_CAPE) {
+      # Invertir en el SP500
+      Dividendo.cap[i] <- Cant.acc.cap[i-1] * Base1$SP500.Dividends..anual.[i]
+      Ganancia.cape[i] <- PCape[i-1] * Base1$SP500.Retorno[i]+Dividendo.cap[i]
+      Compra.acc.cap[i] <- Dividendo.cap[i]/Base1$SP500[i]
+      Cant.acc.cap[i] <- Cant.acc.cap[i-1]+Compra.acc.cap[i]
+      PCape [i] <- PCape[i-1]+ Ganancia.cape[i]
+      Tipo.inversion[i] <- "S&P 500"
+      } 
+      else {
+    # Invertir en bonos
+    Dividendo.cap[i] <- 0
+    Ganancia.cape[i] <- PCape[i-1] * (Base1$Tasas.Bono.10Y..mensual.[i]) 
+    PCape [i] <- PCape[i-1] + Ganancia.cape[i]
+    Cant.acc.cap [i]<- PCape[i] / Base1$SP500[i]
+    Compra.acc.cap [i]<- Cant.acc.cap[i] - Cant.acc.cap[i-1]
+    Tipo.inversion[i] <- "Bono 10Y"
+    }
+  Ret.cape[i] <- ((PCape[i]-PCape[i - 1]) / PCape[i - 1])
+  }
+  return(data.frame(PCape, Ret.cape, Tipo.inversion, Cant.acc.cap, Dividendo.cap, Compra.acc.cap,Ganancia.cape))
+}
+porta1.cape <- function(umbral_CAPE){
+PCape  <-  rep(NA,lnb)
+Cant.acc.cap <- rep(NA,lnb)
+Dividendo.cap <-  rep(NA,lnb)
+Compra.acc.cap <- rep(NA,lnb) 
+Ret.cape <-  rep(NA, lnb)
+Ganancia.cape <-  rep(NA,lnb)
+Tipo.inversion <-  rep(NA,lnb)
+PCape[1]<-1000
+Cant.acc.cap[1]<-PCape[1]/Base1$SP500[1]
+Dividendo.cap[1] <- (Cant.acc.cap[1]*Base1$SP500.Dividends..anual. [1])
+Compra.acc.cap[1] <- 0
+Ganancia.cape[1] <- 0
+Tipo.inversion[1] <- "Nada" 
+  for (i in 2:lnb) {
+    if (Base1$CAPE[i-1] >= umbral_CAPE) {
+      # Invertir en el SP500
+      Dividendo.cap[i] <- Cant.acc.cap[i-1] * Base1$SP500.Dividends..anual.[i]
+      Ganancia.cape[i] <- PCape[i-1] * Base1$SP500.Retorno[i]+Dividendo.cap[i]
+      Compra.acc.cap[i] <- Dividendo.cap[i]/Base1$SP500[i]
+      Cant.acc.cap[i] <- Cant.acc.cap[i-1]+Compra.acc.cap[i]
+      PCape [i] <- PCape[i-1]+ Ganancia.cape[i]
+      Tipo.inversion[i] <- "S&P 500"
+      } 
+      else {
+    # Invertir en bonos
+    Dividendo.cap[i] <- 0
+    Ganancia.cape[i] <- PCape[i-1] * (Base1$Tasas.Bono.10Y..mensual.[i]) 
+    PCape [i] <- PCape[i-1] + Ganancia.cape[i]
+    Cant.acc.cap [i]<- PCape[i] / Base1$SP500[i]
+    Compra.acc.cap [i]<- Cant.acc.cap[i] - Cant.acc.cap[i-1]
+    Tipo.inversion[i] <- "Bono 10Y"
+    }
+  Ret.cape[i] <- ((PCape[i]-PCape[i - 1]) / PCape[i - 1])
+  }
+  return(data.frame(PCape, Ret.cape, Tipo.inversion, Cant.acc.cap, Dividendo.cap, Compra.acc.cap,Ganancia.cape))
+}
+Port.Cape <- porta.cape (umbral_CAPE)
+Port1.Cape <- porta1.cape (umbral_CAPE)
+
+nombres1<-c(colnames(Base1),"PCape", "Ret.cape","PCape1","Ret.cape1")
+Base1 <- cbind(Base1,Port.Cape$PCape,Port.Cape$Ret.cape,Port1.Cape$PCape,Port1.Cape$Ret.cape)
+colnames(Base1)<-nombres1
+f.PCape <- tail(Port.Cape$PCape,1)
+graf5.0 <- {
+    ggplot(data = Base1, aes(x = Date)) +
+    theme_linedraw() +
+    ggtitle("Gráfico 5.0", subtitle = "CAPE en el tiempo") +
+    scale_x_date(date_labels = "%Y", breaks = seq(as.Date("1980-01-01"),
+                                                  as.Date("2030-01-01"), by = "5 years")) +
+    labs(color = "Leyenda", caption = "Fuente: Elaboracion Propia | Datos: Datos Tarea 2") +
+    xlab("Tiempo") + 
+    ylab("Capital [Dólares]") +
+    geom_line(aes(y = CAPE), colour=colores$cape) +
+    geom_hline(yintercept = mean(Base1$CAPE), color = "blue", linetype = "dashed") +
+    annotate("text", x = Base1$Date[118] , y =mean(Base1$CAPE) , label = "Media Cape",  color = "blue", size = 4, hjust = 0.5, vjust = 1.5)
+}
+graf5.0 
+graf5.1 <- {
+    ggplot(data = Base1, aes(x = Date)) +
+    theme_linedraw() +
+    ggtitle("Gráfico 5.1", subtitle = "Comparativa Sara y portafolio CAPE") +
+    scale_x_date(date_labels = "%Y", breaks = seq(as.Date("1980-01-01"), as.Date("2030-01-01"), by = "5 years")) +
+    labs(color = "Leyenda", caption = "Fuente: Elaboracion Propia | Datos: Datos Tarea 2") +
+    xlab("Tiempo") + 
+    ylab("Capital [Dólares]") +
+    geom_line(aes(y = Sara, color = "Sara")) +
+    geom_line(aes(y = Belen, color = "Belén")) +
+    geom_line(aes(y = PCape, color = "CAPE")) +
+    scale_color_manual(name = "Leyenda", values = c("Sara" = colores$sa, "Belén" = colores$be,  "CAPE" = colores$cape))
+}
+graf5.2<- {
+    ggplot(data = Base1, aes(x = Date)) +
+    theme_linedraw() +
+    ggtitle("Gráfico 5.2", subtitle = "Comparativa Sara y portafolio CAPE") +
+    scale_x_date(date_labels = "%Y", breaks = seq(as.Date("1980-01-01"), as.Date("2030-01-01"), by = "5 years")) +
+    labs(color = "Leyenda", caption = "Fuente: Elaboracion Propia | Datos: Datos Tarea 2") +
+    xlab("Tiempo") + 
+    ylab("Capital [Dólares]") +
+    geom_line(aes(y = Sara, color = "Sara")) +
+    geom_line(aes(y = PCape1, color = "CAPE")) +
+    geom_line(aes(y = Belen, color = "Belén")) +
+    scale_color_manual(name = "Leyenda", values = c("Sara" = colores$sa, "Belén" = colores$be,  "CAPE" = colores$cape))
+}
+
+```
+
+*a)* (1 pto.| 9 pts. acumulados) Realice un gráfico que muestre la evolución del portafolio CAPE junto al portafolio de Sara (SP500)
+
+```{r Respuestas Pregunta 3a, include=TRUE}
+
+  print(graf5.0)
+  cat("La media del CAPE desde el 1980 es ",mean(Base1$CAPE))
+  print(graf5.1)
+ # print(graf5.2)
+```
+
+El umbral del cape es su media del periodo, la cual corresponde a `r round(umbral_CAPE,3)`, El capital final del Portafolio de Sara es de \$`r round(f.Sara,3)` Mientras que el capital final del Portafolio CAPE es de \$`r round(f.PCape,2)`. La diferecia de capitales es de \$`r round(f.Sara- f.PCape,2)` quedando mejor Sara.
+ 
+*b)* (2 pts.| 11 pts. acumulados) Comente los resultados.
+
+Utilizar el Portafolio Cape es mejor que utilizar un portafolio solamente con bonos, pero no es mejor que el portafolio del S&P 500. Si analizamos el las ganancias totales de los portafolios es preferible invertir en el S&P 500, sin embargo, si analizamos la volatilidad del portafolio Cape es mucho menor. Cabe destacar que no se aprovechan las subidas de las acciones, y las crisis tampoco afectan demasiado.
+
+*c)* (1 pto.| 12 pts. acumulados) Analice que hubiese pasado si se elegia otro umbral. Hint: Puede utilizar “análisis de hipótesis: tabla de datos” de Excel para analizar qué hubiese pasado con el valor final del portafolio para distintos umbrales. Comente sus resultados.
+
+```{r Resolución 3c}
+# Definir el rango de umbrales a probar
+umbrales <- seq(from = min(Base1$CAPE), to = max(Base1$CAPE), by = 0.1)
+resultados <- data.frame(Umbral = umbrales, F.Port = rep(NA, length(umbrales)))
+
+# Función para simular el portafolio basado en CAPE con un umbral dado
+simular_portafolio<- function(umbral_CAPE){
+PCape  <-  rep(NA,lnb)
+Cant.acc.cap <- rep(NA,lnb)
+Dividendo.cap <-  rep(NA,lnb)
+Compra.acc.cap <- rep(NA,lnb) 
+Ret.cape <-  rep(NA, lnb)
+Ganancia.cape <-  rep(NA,lnb)
+Tipo.inversion <-  rep(NA,lnb)
+PCape[1]<-1000
+Cant.acc.cap[1]<-PCape[1]/Base1$SP500[1]
+Dividendo.cap[1] <- (Cant.acc.cap[1]*Base1$SP500.Dividends..anual. [1])
+Compra.acc.cap[1] <- 0
+Ganancia.cape[1] <- 0
+Tipo.inversion[1] <- "Nada" 
+  for (i in 2:lnb) {
+    if (Base1$CAPE[i-1] <= umbral_CAPE) {
+      # Invertir en el SP500
+      Dividendo.cap[i] <- Cant.acc.cap[i-1] * Base1$SP500.Dividends..anual.[i]
+      Ganancia.cape[i] <- PCape[i-1] * Base1$SP500.Retorno[i]+Dividendo.cap[i]
+      Compra.acc.cap[i] <- Dividendo.cap[i]/Base1$SP500[i]
+      Cant.acc.cap[i] <- Cant.acc.cap[i-1]+Compra.acc.cap[i]
+      PCape [i] <- PCape[i-1]+ Ganancia.cape[i]
+      Tipo.inversion[i] <- "S&P 500"
+      } 
+      else {
+    # Invertir en bonos
+    Dividendo.cap[i] <- 0
+    Ganancia.cape[i] <- PCape[i-1] * (Base1$Tasas.Bono.10Y..mensual.[i]) 
+    PCape [i] <- PCape[i-1] + Ganancia.cape[i]
+    Cant.acc.cap [i]<- PCape[i] / Base1$SP500[i]
+    Compra.acc.cap [i]<- Cant.acc.cap[i] - Cant.acc.cap[i-1]
+    Tipo.inversion[i] <- "Bono 10Y"
+    }
+  Ret.cape[i] <- ((PCape[i]-PCape[i - 1]) / PCape[i - 1])
+  }
+  return(tail(PCape,1))
+}
+
+# Simular para cada umbral y guardar el resultado final
+for (j in 1:length(umbrales)) {
+  resultados$F.Port[j] <- simular_portafolio(umbrales[j])
+}
+  #añadir color
+colores<-c(colores,
+           max = rgb(238,95,1,maxColorValue = 255))
+# Valores maximos umbral
+ max.port.y <- max(resultados$F.Port)
+ max.port.x <- min(resultados[resultados$F.Port==max.port.y,])
+ #gráfico 
+graf6<- {
+    ggplot(data = resultados, aes(x=Umbral )) +
+    theme_linedraw() +
+    geom_line(aes(y=`F.Port`),colour="purple")+
+    ggtitle("Gráfico 6", subtitle = "Valor del portafolio dado el umbral") +
+    labs(color = "Leyenda", caption = "Fuente: Elaboracion Propia | Datos: Datos Tarea 2") +
+    annotate(geom = "point", x = max.port.x, y = max.port.y, colour = colores$max, size = 1.5)+
+    annotate("text", x = max.port.x, y = max.port.y, label = paste("(", round(max.port.x,2), ";", round(max.port.y,2), ")"), color = colores$max, hjust = 1.1, vjust = 0, size =3) +
+    xlab("Umbral de Cape") + 
+    ylab("Valor final [Dólares]") +
+    scale_x_continuous(breaks = seq(0,45,by = 5))
+}
+
+ # portafolio con mejor valoracion
+Port.max.cape <- porta.cape(max.port.x)
+graf6.1 <- {
+    ggplot(data = Base1, aes(x = Date)) +
+    theme_linedraw() +
+    ggtitle("Gráfico 6.1", subtitle = "Comparativa Sara, portafolio CAPE y portafolio con Cape máximo") +
+    scale_x_date(date_labels = "%Y", breaks = seq(as.Date("1980-01-01"), as.Date("2030-01-01"), by = "5 years")) +
+    labs(color = "Leyenda", caption = "Fuente: Elaboracion Propia | Datos: Datos Tarea 2") +
+    xlab("Tiempo") + 
+    ylab("Capital [Dólares]") +
+    geom_line(aes(y = Sara, color = "Sara")) +
+    geom_line(aes(y = PCape, color = "CAPE")) +
+    geom_line(aes(y = Port.max.cape$PCape, color = "Max CAPE")) +
+    scale_color_manual(name = "Leyenda", values = c("Sara" = colores$sa, "CAPE" = colores$cape, "Max CAPE"=colores$max))
+}
+```
+
+```{r Resultados 3c, include=TRUE}
+ 
+  print(graf6)
+  datatable(resultados)
+  print(graf6.1)
+```
+  
+Los valoraciones finales del portafolio van mejorando a medida que el umbral va aumentando, sin embargo hay calores en los que decae, no obstante el mejor valor es cuando el umbral es `r round(max.port.x,3)` y obtiene un valor final de portafolio de \$`r round(max.port.y,2)`
+
+**4.** (3 pts.| 15 pts. acumulados) Suponga que usted quiere aplicar alguna de las estrategias en la práctica. Sin embargo,usted se da cuenta que es complicada la implementación de invertir y vender 500 acciones. ¿Existen instrumentos transables o disponibles en donde esta dificultad no exista, y por tanto se haga más fácil la implementación de esta estrategia? Explique como lo haría.
+
+1) Una de las primeras opciones como alternativa son los fondos de inversión indexados (ETFs): Existen ETFs que siguen al SP500 , esto quiere decir que intentan replicar su rendimiento. Al invertir en ETFs , se invierte en una portafolio de diversas acciones que componen este indice. Esta alternativa puede simplificar la estrategia, ya que solo se necesitaria comprar y vender acciones de un solo ETF en lugar de las 500 acciones individuales.
+
+2) Otra posible alternativa es invertir en fondos mutuos del S&P500: Al igual que los fondos de inversión indexados (ETFs), los fondos mutuos que siguen al S&P500 invierten en un portafolio de acciones que componen el indice. Esto significa que se puede comprar y vender participaciones del fondo mutuo en lugar de acciones individuales, lo que consideramos que simplificaria la ejecución de la estrategia.
+
+
+**5.** (4 pts.| 19 pts. acumulados) Suponga ahora que cuando Sara cumplió 23 años (2003/abr) comenzó a generar ingresos, y fue ahorrando cada mes 170 USD que los fue invirtiendo en su portafolio (SP500). Calcule cuánto dinero tendría hoy en día con ese ahorro constante. Hint: En 2003/abr (al final) el portafolio tendrá un valor X producto de la rentabilidad generada de la inversión inicial de 1000 USD. El valor del portafolio en el siguiente periodo considerando el ahorro se obtiene:
+
+𝑃𝑜𝑟𝑡𝑓𝑜𝑙𝑖𝑜2003/𝑚𝑎𝑦2003/𝑚𝑎𝑦= 𝑋 ∗ (1 + 𝑟 𝑆𝑃500 2003/𝑚𝑎𝑦) + 170
+
+```{r Resolución 5}
+emision.bono <- mean(Base1$Tasas.Bono.10Y..mensual.)
+colores <- c(colores,   Sara_23= rgb( 233,162,49,maxColorValue = 255))
+Base1 <- data.frame(Base1,Sara_23 = rep(NA,lnb), Ret.Sara_23 = rep(NA, lnb), Abono = rep(0, lnb), Cant.acc_23 = rep(NA,lnb), Dividendo.sa_23 = rep(NA,lnb)) 
+for (i in 1:lnb) {
+  if (Base1$Date[i]>as_date("2003-04-02"))
+    {
+    Base1$Abono[i]<-170
+  }
+#Sara
+{
+Base1$Sara_23[1]<-1000
+Base1$Cant.acc_23[1]<-Base1$Sara_23[1]/Base1$SP500[1]
+Base1$Dividendo.sa_23[1] <- (Base1$Cant.acc_23[1]*Base1$SP500.Dividends..anual. [1])
+Base1$Compra.acc_23[1] <- (Base1$Dividendo.sa_23[1]+Base1$Abono[1])/Base1$SP500[1]
+  for(i in 2:lnb) { 
+    Base1$Dividendo.sa_23[i] <- Base1$Cant.acc_23[i-1] * Base1$SP500.Dividends..anual.[i]
+    Base1$Compra.acc_23[i] <- (Base1$Dividendo.sa_23[i]+Base1$Abono[i])/Base1$SP500[i]
+    Base1$Cant.acc_23[i] <- Base1$Cant.acc_23[i-1]+Base1$Compra.acc[i]
+    Base1$Sara_23[i] <- (Base1$Sara_23[i-1] * (1 + Base1$SP500.Retorno [i]))+Base1$Dividendo.sa_23[i]+Base1$Abono[i]
+    Base1$Ret.Sara_23[i] <- ((Base1$Sara_23[i]-Base1$Sara[i-1]) / Base1$Sara_23[i-1])
+      }
+    } 
+  }
+graf7 <- {
+    ggplot(data = Base1, aes(x = Date)) +
+    theme_linedraw() +
+    ggtitle("Gráfico 7", subtitle = "Comparativa portafolio Sara inicial y Sara con aporte desde los 23 años") +
+    scale_x_date(date_labels = "%Y", breaks = seq(as.Date("1980-01-01"), as.Date("2030-01-01"), by = "5 years")) +
+    labs(color = "Leyenda", caption = "Fuente: Elaboracion Propia | Datos: Datos Tarea 2") +
+    xlab("Tiempo") + 
+    ylab("Capital [Dólares]") +
+    geom_line(aes(y = Sara, color = "Sara")) +
+    geom_line(aes(y = Sara_23, color = "Sara_23")) +  
+    geom_vline(xintercept = Base1$Date[278] , color = "blue", linetype = "dashed") +
+    annotate("text", x = Base1$Date[278] , y =150000 , label = "Mayo-2003",  color = "blue", size = 4, hjust =1.1, vjust = 0) + 
+    scale_color_manual(name = "Leyenda", values = c("Sara" = colores$sa, "Sara_23" = colores$Sara_23, hjust=7))
+}
+graf7
+f.sara_23 <- tail(Base1$Sara_23,1)
+```
+
+```{r Resultados 5, include=TRUE}
+  print(graf7)
+```
+  
+ El valor final del portafolio de Sara con aporte desde los 23 años es de \$ `r round(f.sara_23,2)` lo cual tiene una gran diferencia con el portafolio inicial de Sara equivalente a \$ `r round(f.sara_23 - f.Sara, 2)` y en terminos de porcentaje, el nuevo portafolio corresponde al `r round((f.sara_23/f.Sara)*100,3)`\% del anterior.
+
+ **6.** (3 ptos| 22 pts. acumulados) Considere que hoy en día Sara tiene 42 años, y está evaluando la opción de invertir su riqueza acumulada (pregunta anterior) de tal forma que esta inversión le genere un flujo de efectivo mensual, trimestral, semestral o anual, que tiene pensando utilizar para viajar. Explique en qué podría invertir ese dinero y estime cuánto efectivo aproximadamente podría generarle este portafolio al año.
+ 
+```{r Resolucion 6}
+cuota.Sara_42 <- round(mean(Base1$Tasas.Bono.10Y..mensual.) * f.sara_23,2)
+```
+
+Asumiendo que Sara no quiera estar preocupada de monitorear activos de renta variable, y quisiera asegurar ingresos fijos con un minimo riesgo en invirtiendo todo el capital acumulado, sería prudente optar por una inversión en renta fija o en bonos. Dicho esto, suponiendo un bono en el que se estimó su tasa de emision como un promedio de estas a lo largo del tiempo que ella ha vivido (desde 1980), se obtendría un valor esperado mensual de  $`r round(cuota.Sara_42,3)`  de manera fija, por lo cual podría viajar tranquilamente.
+
+**7.** Por último, usted decide crear un portafolio compuesto de 7 acciones elegidas por usted, todas con igual ponderación de inversión, donde quiere implementar lo que sabe de optimización de portafolios, para esto usted debe: 
+
+```{r Resolucion 7}
+ #precios de acciones en periodicidad diaria
+Intel <- tq_get("INTC", get="stock.prices",complete_cases = TRUE, from= "2018-01-01", to= "2021-12-31")
+Apple <- tq_get("AAPL", get="stock.prices",complete_cases = TRUE, from= "2018-01-01", to= "2021-12-31")
+Amazon <- tq_get("AMZN", get="stock.prices",complete_cases = TRUE, from= "2018-01-01", to= "2021-12-31")
+Microsoft <- tq_get("MSFT", get="stock.prices",complete_cases = TRUE, from= "2018-01-01", to= "2021-12-31")
+Meta <- tq_get("META", get="stock.prices",complete_cases = TRUE, from= "2018-01-01", to= "2021-12-31")
+Google <- tq_get("GOOG", get="stock.prices",complete_cases = TRUE, from= "2018-01-01", to= "2021-12-31")
+Netflix <- tq_get("NFLX", get="stock.prices",complete_cases = TRUE, from= "2018-01-01", to= "2021-12-31")
+
+#Precio de sp500 (para calcular mercado)
+SP500 <-  na.locf(tq_get("^gspc", get="stock.prices", complete_cases = TRUE, from= "2018-01-01", to= "2021-12-31"))
+
+#tasa libre de riesgo para bonor soberanos en USA a 10 años
+
+Rf <- na.omit(tq_get("^TNX", get="stock.prices",complete_cases = TRUE, from= "2018-01-01", to= "2021-12-31"))
+
+Date <- as.Date(as.character(Intel$date),"%Y-%m-%d")
+
+Intelc <- xts(Intel$close,Date)
+Applec <- xts(Apple$close,Date)
+Amazonc <- xts(Amazon$close,Date)
+Microsoftc <- xts(Microsoft$close,Date)
+Metac <- xts(Meta$close,Date)
+Googlec <- xts(Google$close,Date)
+Netflixc <- xts(Netflix$close,Date)
+SP500c <- xts(SP500$close,Date)
+rfc <- xts(Rf$close,Date)
+
+base3 <- data.frame(Intelc,Applec,Amazonc,Microsoftc,Metac,Googlec,Netflixc,SP500c)
+retornos1 <-  na.omit(Return.calculate(base3, method="simple")[-c(1),])
+colnames(retornos1) <- c("INTC","APPL","AMZN","MSFT","META","GOOG","NFLX","SyP500")
+DSV.Intel <- sd(Intel$close)
+DSV.Apple <- sd(Apple$close)
+DSV.Amazon <- sd(Amazon$close)
+DSV.Microsoft <- sd(Microsoft$close)
+DSV.Meta <- sd(Meta$close)
+DSV.Google <- sd(Google$close)
+Dsv.Netflix <- sd(Netflix$close)
+
+Matriz_cov <- cov(retornos1[,1:7])
+Matriz_cor <- cor(retornos1[,1:7])
+
+Vector_retornos <-c(mean(retornos1$INTC),mean(retornos1$APPL),mean(retornos1$AMZN),mean(retornos1$MSFT),mean(retornos1$META),mean(retornos1$GOOG),mean(retornos1$NFLX))
+weights_merc <- c(rep(1/7,7))
+
+portafolio.merc <- getPortfolio(Vector_retornos,Matriz_cov,weights_merc)
+portafolio.merc
+
+port.min.var <- globalMin.portfolio(Vector_retornos,Matriz_cov, shorts = TRUE)
+port.min.var
+tickers <- c("INTC","APPL","AMZN","MSFT","META","GOOG","NFLX")
+Peso <- 1/7
+sdsd<- c(DSV.Intel, DSV.Apple ,
+DSV.Amazon, DSV.Microsoft ,DSV.Meta, DSV.Google,
+Dsv.Netflix) 
+```
+
+*a)* (1 pto.| 23 pts. acumulados) Obtener retornos y volatilidad de los retornos de cada activo 
+Los retornos de los activos son:
+`r datatable(retornos1)`
+la volatilidad de los activos es 
+
+`r print(sdsd)`
+
+  
+*b)* (1 pto.| 24 pts. acumulados) Obtener la matriz de covarianza y correlación entre activos 
+
+Matriz de Covarianza\n 
+`r datatable(Matriz_cov)`\n 
+
+Matriz de Correlación\n 
+`r print(Matriz_cor)`
+
+*c)* (2 pts.| 26 pts. acumulados) Obtener retorno y volatilidad del portafolio 
+
+
+Considerando `r lt ` empresas, las cuales son: `r print(tickers[1])`, con un portafolio equiponderado equivalente a `r Peso` por cada empresa. se obtiene :
+`r print(portafolio.merc)`
+
+*d)* (3 pts.| 29 pts. acumulados) Optimice su portafolio como usted desee (minimizando varianza, maximizando retorno, etc) y comente sus resultados comparándolo con el portafolio sin optimizar.
+
+Se obtiene el portafolio los datos `r print(port.min.var)` 
+
+naturalmente el portafolio de minima varianza tiene una desviacion standard mas pequeña y a su vez menor retorno
+
+
+*e)* (1 pto.| 30 pts. acumulados) Mencionar si dejaría alguna acción fuera su portafolio y mencione su criterio de decisión. 
+
+Debido a que las acciones tienen una varianza elevada, coimo un inversor conservador, preferiría sacar las acciones con mayor desviacion, las cuales serían netflix y microsoft.
+
+Hint: Obtenga los precios de cierre ajustados mensuales entre las fechas 01-01-2018 hasta el 31-12-2021. Puede obtener esta información a través de la página [Yahoo](www.yahoofinance.com), introduzca el ticker de la compañía y vaya a “Historical prices”, luego poner fechas que quiere ver, frecuencia de los datos y descargar.
+
